@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Verificar XML</title>
+  <style>
+    body{font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#f6f7f9; margin:0; padding:40px;}
+    .card{max-width:960px; margin:0 auto; background:white; border-radius:16px; padding:24px; box-shadow:0 10px 25px rgba(0,0,0,.08);}
+    h1{margin:0 0 8px; font-size:28px;}
+    p{margin:6px 0 18px; color:#444;}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    input[type="file"]{flex:1; min-width:240px; padding:10px; border:1px solid #ddd; border-radius:8px;}
+    button{padding:12px 18px; border:0; border-radius:10px; background:#111827; color:white; font-weight:600; cursor:pointer;}
+    button.secondary{background:#2563eb;}
+    button:disabled{opacity:.6; cursor:not-allowed;}
+    .status{margin-top:14px; font-size:14px; color:#555;}
+    .ok{color:#065f46; font-weight:600;}
+    .err{color:#b91c1c; font-weight:600;}
+    table{width:100%; border-collapse:collapse; margin-top:16px;}
+    th, td{border:1px solid #e5e7eb; padding:8px; font-size:12px; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px;}
+    th{background:#f3f4f6;}
+    .actions{display:flex; gap:10px; margin-top:12px;}
+    footer{margin-top:28px; font-size:12px; color:#666;}
+    .small{font-size:12px; color:#666;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Verificar XML</h1>
+    <p>Selecione um arquivo <strong>.xml</strong> de NF-e. O sistema converte para <strong>Excel</strong> e você pode <strong>ver a prévia no site</strong> e/ou <strong>baixar o arquivo</strong>.</p>
+
+    <div class="row">
+      <input id="xmlfile" type="file" accept=".xml" />
+      <button id="btnPreview" onclick="preview()">Ver prévia no site</button>
+      <button id="btnDownload" class="secondary" onclick="downloadExcel()">Baixar Excel</button>
+    </div>
+
+    <div id="status" class="status"></div>
+    <div id="preview"></div>
+
+    <footer>
+      <div class="small">Ajuste as URLs abaixo conforme o back-end:</div>
+      <pre class="small"><code>const API_JSON = "http://127.0.0.1:8000/upload_json";
+const API_XLSX = "http://127.0.0.1:8000/upload";</code></pre>
+    </footer>
+  </div>
+
+  <script>
+    // Ajuste as URLs se o backend estiver remoto (Render/Railway/VPS):
+    const API_JSON = "http://127.0.0.1:8000/upload_json";
+    const API_XLSX = "http://127.0.0.1:8000/upload";
+
+    function getFile(){
+      const fileInput = document.getElementById('xmlfile');
+      if(!fileInput.files.length) throw new Error("Selecione um arquivo .xml primeiro.");
+      const file = fileInput.files[0];
+      if(!file.name.toLowerCase().endsWith(".xml")) throw new Error("O arquivo precisa ter extensão .xml");
+      return file;
+    }
+
+    async function preview(){
+      const status = document.getElementById('status');
+      const preview = document.getElementById('preview');
+      status.textContent = ""; status.className = "status";
+      preview.innerHTML = "";
+      try{
+        const file = getFile();
+        status.textContent = "Gerando prévia…";
+
+        const form = new FormData();
+        form.append("file", file);
+        const resp = await fetch(API_JSON + "?preview_rows=200", { method: "POST", body: form });
+        if(!resp.ok){
+          const err = await resp.json().catch(()=>({error: "Falha na prévia"}));
+          throw new Error(err.error || ("Erro HTTP " + resp.status));
+        }
+        const data = await resp.json();
+
+        if(!data || !data.columns || !Array.isArray(data.rows)){
+          throw new Error("Resposta inesperada do servidor.");
+        }
+
+        status.textContent = `Prévia pronta (${data.rows.length} de ${data.total_rows} linhas).`;
+        status.className = "status ok";
+
+        // Monta tabela
+        const table = document.createElement("table");
+        const thead = document.createElement("thead");
+        const trh = document.createElement("tr");
+        for(const col of data.columns){
+          const th = document.createElement("th"); th.textContent = col; trh.appendChild(th);
+        }
+        thead.appendChild(trh);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        for(const row of data.rows){
+          const tr = document.createElement("tr");
+          for(const col of data.columns){
+            const td = document.createElement("td");
+            let val = row[col];
+            if(val === null || typeof val === "undefined") val = "";
+            td.textContent = String(val);
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        preview.appendChild(table);
+      }catch(e){
+        status.textContent = "Erro: " + e.message;
+        status.className = "status err";
+      }
+    }
+
+    async function downloadExcel(){
+      const status = document.getElementById('status');
+      status.textContent = ""; status.className = "status";
+      try{
+        const file = getFile();
+        status.textContent = "Convertendo para Excel…";
+
+        const form = new FormData();
+        form.append("file", file);
+        const resp = await fetch(API_XLSX, { method: "POST", body: form });
+        if(!resp.ok){
+          const err = await resp.json().catch(()=>({error: "Falha ao converter"}));
+          throw new Error(err.error || ("Erro HTTP " + resp.status));
+        }
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "Validador_XML.xlsx";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        status.textContent = "Pronto — Excel baixado.";
+        status.className = "status ok";
+      }catch(e){
+        status.textContent = "Erro: " + e.message;
+        status.className = "status err";
+      }
+    }
+  </script>
+</body>
+</html>
