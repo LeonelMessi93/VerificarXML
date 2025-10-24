@@ -48,9 +48,8 @@ const API_XLSX = "http://127.0.0.1:8000/upload";</code></pre>
 
   <script>
     // Ajuste as URLs se o backend estiver remoto (Render/Railway/VPS):
-    const API_JSON = "http://127.0.0.1:8000/upload_json";
-    const API_XLSX = "http://127.0.0.1:8000/upload";
-
+      const API_JSON = "https://verificarxml.onrender.com/upload_json";
+      const API_XLSX = "https://verificarxml.onrender.com/upload";
     function getFile(){
       const fileInput = document.getElementById('xmlfile');
       if(!fileInput.files.length) throw new Error("Selecione um arquivo .xml primeiro.");
